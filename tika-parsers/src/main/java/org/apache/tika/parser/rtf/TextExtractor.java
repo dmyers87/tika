@@ -17,6 +17,15 @@
 
 package org.apache.tika.parser.rtf;
 
+import org.apache.commons.io.IOUtils;
+import org.apache.tika.exception.TikaException;
+import org.apache.tika.extractor.EmbeddedDocumentUtil;
+import org.apache.tika.metadata.*;
+import org.apache.tika.sax.XHTMLContentHandler;
+import org.apache.tika.utils.CharsetUtils;
+import org.xml.sax.SAXException;
+import org.xml.sax.helpers.AttributesImpl;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PushbackInputStream;
@@ -27,26 +36,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CoderResult;
 import java.nio.charset.CodingErrorAction;
-import java.util.Calendar;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Stack;
-import java.util.TimeZone;
-
-import org.apache.commons.io.IOUtils;
-import org.apache.tika.exception.TikaException;
-import org.apache.tika.extractor.EmbeddedDocumentUtil;
-import org.apache.tika.metadata.Metadata;
-import org.apache.tika.metadata.Office;
-import org.apache.tika.metadata.OfficeOpenXMLCore;
-import org.apache.tika.metadata.OfficeOpenXMLExtended;
-import org.apache.tika.metadata.Property;
-import org.apache.tika.metadata.TikaCoreProperties;
-import org.apache.tika.sax.XHTMLContentHandler;
-import org.apache.tika.utils.CharsetUtils;
-import org.xml.sax.SAXException;
+import java.util.*;
 
 /* Tokenizes and performs a "shallow" parse of the RTF
  * document, just enough to properly decode the text.
@@ -296,8 +286,8 @@ final class TextExtractor {
     // keywords, etc.) inside the info group:
     private Property nextMetaData;
     private boolean inParagraph;
-    // Non-zero if we are processing inside a field destination:
-    private int fieldState;
+    // Non-null if we are processing inside a field destination:
+    private FieldState fieldState;
     // Non-zero list index
     private int pendingListEnd;
     private Map<Integer, ListDescriptor> listTable = new HashMap<Integer, ListDescriptor>();
@@ -308,7 +298,7 @@ final class TextExtractor {
     private boolean ignoreListMarkup;
     // Non-null if we've seen the url for a HYPERLINK but not yet
     // its text:
-    private String pendingURL;
+    //private String pendingURL;
     // Used to process the sub-groups inside the upr
     // group:
     private int uprState = -1;
@@ -432,7 +422,7 @@ final class TextExtractor {
             pushBytes();
         }
 
-        if (inHeader || fieldState == 1) {
+        if (inHeader || fieldState != null) {
             pendingBuffer.append(ch);
         } else if (groupState.sn == true || groupState.sv == true) {
             embObjHandler.writeMetadataChar(ch);
@@ -746,7 +736,7 @@ final class TextExtractor {
 
                 final int pos = outputCharBuffer.position();
                 if (pos > 0) {
-                    if (inHeader || fieldState == 1) {
+                    if (inHeader || (fieldState != null && fieldState.isBufferText())) {
                         pendingBuffer.append(outputArray, 0, pos);
                     } else {
                         lazyStartParagraph();
@@ -765,7 +755,7 @@ final class TextExtractor {
 
                 final int pos = outputCharBuffer.position();
                 if (pos > 0) {
-                    if (inHeader || fieldState == 1) {
+                    if (inHeader || (fieldState != null && fieldState.isBufferText())) {
                         pendingBuffer.append(outputArray, 0, pos);
                     } else {
                         lazyStartParagraph();
@@ -1033,6 +1023,17 @@ final class TextExtractor {
                 }
             } else {
                 // log some warning?
+            }
+        }
+
+        // Process field control words
+        if (fieldState != null) {
+            if (equals("fftype")) {
+                fieldState.setType(FieldState.FormFieldType.fromRtfType(param));
+            } else if (equals("ffres")) {
+                if (fieldState.getType() == FieldState.FormFieldType.CHECKBOX && param == 1) {
+                    fieldState.setChecked(true);
+                }
             }
         }
     }
@@ -1384,16 +1385,29 @@ final class TextExtractor {
                 // unicode RIGHT DOUBLE QUOTATION MARK
                 addOutputChar('\u201D');
             }
-        } else if (equals("fldinst")) {
-            fieldState = 1;
+        } else if (equals("field")) {
+            fieldState = new FieldState();
             groupState.ignore = false;
-        } else if (equals("fldrslt") && fieldState == 2) {
-            assert pendingURL != null;
-            lazyStartParagraph();
-            out.startElement("a", "href", pendingURL);
-            pendingURL = null;
-            fieldState = 3;
-            groupState.ignore = false;
+        } else if (fieldState != null) {
+            if (equals("fldinst")) {
+                fieldState.setCurrentGroup(FieldState.FieldGroups.fldinst);
+                groupState.ignore = false;
+            } else if (equals("formfield")) {
+                fieldState.setCurrentGroup(FieldState.FieldGroups.formfield);
+                groupState.ignore = false;
+            } else if (equals("ffname")) {
+                fieldState.setCurrentGroup(FieldState.FieldGroups.ffname);
+                groupState.ignore = false;
+            } else if (equals("fldrslt")) {
+                fieldState.setCurrentGroup(FieldState.FieldGroups.fldrslt);
+
+                // If we don't know this type of field we'll simply output the text
+                if (fieldState.getInst() == FieldState.FieldInst.UNKNOWN) {
+                    fieldState.setBufferText(false);
+                }
+
+                groupState.ignore = false;
+            }
         }
     }
 
@@ -1507,34 +1521,125 @@ final class TextExtractor {
         }
         assert groupStates.size() == groupState.depth;
 
-        if (fieldState == 1) {
-            String s = pendingBuffer.toString().trim();
-            pendingBuffer.setLength(0);
-            if (s.startsWith("HYPERLINK")) {
-                s = s.substring(9).trim();
-                // TODO: what other instructions can be in a
-                // HYPERLINK destination?
-                final boolean isLocalLink = s.contains("\\l ");
-                int idx = s.indexOf('"');
-                if (idx != -1) {
-                    int idx2 = s.indexOf('"', 1 + idx);
-                    if (idx2 != -1) {
-                        s = s.substring(1 + idx, idx2);
-                    }
-                }
-                pendingURL = (isLocalLink ? "#" : "") + s;
-                fieldState = 2;
+        // Handle field destinations
+        if (fieldState != null) {
+            if (fieldState.getCurrentGroup() == null) {
+                // closing the field group
+                fieldState = null;
             } else {
-                fieldState = 0;
+                switch (fieldState.getCurrentGroup()) {
+                    case fldinst:
+                        processFieldInst();
+                        break;
+
+                    case fldrslt:
+                        processFieldRslt();
+                        fieldState.setCurrentGroup(null);
+                        break;
+
+                    case ffname:
+                        if (pendingBuffer.length() > 0) {
+                            String s = pendingBuffer.toString().trim();
+                            pendingBuffer.setLength(0);
+                            fieldState.setName(s);
+                        }
+                        break;
+
+                    default:
+                        fieldState.setBufferText(false);
+                }
+            }
+        }
+    }
+
+    private void processFieldInst() {
+        if (pendingBuffer.length() == 0) {
+            return;
+        }
+
+        String s = pendingBuffer.toString().trim();
+        pendingBuffer.setLength(0);
+        if (s.startsWith("HYPERLINK")) {
+            fieldState.setInst(FieldState.FieldInst.HYPERLINK);
+            s = s.substring(9).trim();
+            // TODO: what other instructions can be in a
+            // HYPERLINK destination?
+            final boolean isLocalLink = s.contains("\\l ");
+            int idx = s.indexOf('"');
+            if (idx != -1) {
+                int idx2 = s.indexOf('"', 1 + idx);
+                if (idx2 != -1) {
+                    s = s.substring(1 + idx, idx2);
+                }
             }
 
-            // TODO: we could process the other known field
-            // types.  Right now, we will extract their text
-            // inlined, but fail to record them in metadata
-            // as a field value.
-        } else if (fieldState == 3) {
-            end("a");
-            fieldState = 0;
+            fieldState.setUrl((isLocalLink ? "#" : "") + s);
+        } else if (s.startsWith("FORMCHECKBOX")) {
+            fieldState.setInst(FieldState.FieldInst.FORMCHECKBOX);
+        } else if (s.startsWith("FORMTEXT")) {
+            fieldState.setInst(FieldState.FieldInst.FORMTEXT);
+        } else {
+            fieldState.setInst(FieldState.FieldInst.UNKNOWN);
+        }
+    }
+
+    /* This is where the output for a field actually happens. \fldrslt is the last group in the field destination */
+    private void processFieldRslt() throws TikaException, SAXException, IOException {
+        switch (fieldState.getInst()) {
+            case HYPERLINK:
+                // Create <a href="http://myurl.com">Link text</a>
+                String s = pendingBuffer.toString().trim();
+                pendingBuffer.setLength(0);
+                fieldState.setResult(s);
+
+                assert fieldState.getUrl() != null;
+                lazyStartParagraph();
+                out.startElement("a", "href", fieldState.getUrl());
+                out.characters(fieldState.getResult());
+                end("a");
+                break;
+
+            case FORMCHECKBOX:
+                // Create <input type="checkbox" name="checkboxName" checked="true" />
+                AttributesImpl checkboxAttributes = new AttributesImpl();
+                checkboxAttributes.addAttribute("", "type", "type", "CDATA", "checkbox");
+                checkboxAttributes.addAttribute("", "name", "name", "CDATA", fieldState.getName());
+
+                if (fieldState.isChecked()) {
+                    checkboxAttributes.addAttribute("", "checked", "checked", "CDATA", "true");
+                }
+
+                out.startElement("input", checkboxAttributes);
+                out.endElement("input");
+                break;
+
+            case FORMTEXT:
+                // Create <input type="text" name="textName" value="text box value" />
+                s = pendingBuffer.toString().trim();
+                pendingBuffer.setLength(0);
+                fieldState.setResult(s);
+
+                AttributesImpl textAttributes = new AttributesImpl();
+                textAttributes.addAttribute("", "type", "type", "CDATA", "text");
+                textAttributes.addAttribute("", "name", "name", "CDATA", fieldState.getName());
+
+                if (fieldState.getResult() == null) {
+                    textAttributes.addAttribute("", "value", "value", "CDATA", "");
+                } else {
+                    textAttributes.addAttribute("", "value", "value", "CDATA", fieldState.getResult());
+                }
+
+                out.startElement("input", textAttributes);
+                out.endElement("input");
+                break;
+
+            case UNKNOWN:
+                // we should never get here, but just in case we'll output anything in the pending buffer
+                if (pendingBuffer.length() > 0) {
+                    out.characters(pendingBuffer.toString());
+                }
+
+                break;
         }
     }
 }

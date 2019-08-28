@@ -16,22 +16,6 @@
  */
 package org.apache.tika.parser.rtf;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.InputStream;
-import java.io.StringWriter;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
 import org.apache.commons.io.FilenameUtils;
 import org.apache.tika.Tika;
 import org.apache.tika.TikaTest;
@@ -39,11 +23,7 @@ import org.apache.tika.config.TikaConfig;
 import org.apache.tika.extractor.ContainerExtractor;
 import org.apache.tika.extractor.ParserContainerExtractor;
 import org.apache.tika.io.TikaInputStream;
-import org.apache.tika.metadata.Metadata;
-import org.apache.tika.metadata.Office;
-import org.apache.tika.metadata.OfficeOpenXMLCore;
-import org.apache.tika.metadata.RTFMetadata;
-import org.apache.tika.metadata.TikaCoreProperties;
+import org.apache.tika.metadata.*;
 import org.apache.tika.mime.MediaType;
 import org.apache.tika.parser.AutoDetectParser;
 import org.apache.tika.parser.ParseContext;
@@ -54,6 +34,14 @@ import org.apache.tika.sax.BasicContentHandlerFactory;
 import org.apache.tika.sax.RecursiveParserWrapperHandler;
 import org.apache.tika.sax.WriteOutContentHandler;
 import org.junit.Test;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.io.StringWriter;
+import java.util.*;
+
+import static org.junit.Assert.*;
 
 /**
  * Junit test class for the Tika {@link RTFParser}
@@ -588,6 +576,25 @@ public class RTFParserTest extends TikaTest {
     public void testTIKA2899() throws Exception {
         assertContains("this Agreement on today",
                 getXML("testRTFTIKA_2899.rtf").xml);
+    }
+
+    @Test
+    public void testFormFields() throws Exception {
+        // Contains checkbox and text fields with text
+        XMLResult result = getXML("testRTFFormFields.rtf");
+
+        assertContains("<input type=\"checkbox\" name=\"CheckBox\" />", result.xml);
+        assertContains("<input type=\"checkbox\" name=\"CheckBox\" checked=\"true\" />", result.xml);
+        assertContains("<input type=\"text\" name=\"Eyes\" value=\"__\" />", result.xml);
+        assertContains("<input type=\"text\" name=\"PLAN\" value=\"_flushed and packed ears. _\" />", result.xml);
+
+
+        // Contains checkboxes and text fields and hyperlinks
+        XMLResult result2 = getXML("testRTFFormFields2.rtf");
+
+        assertContains("<input type=\"checkbox\" name=\"CheckBox\" />", result2.xml);
+        assertContains("<input type=\"text\" name=\"Nervous System\" value=\"__\" />", result2.xml);
+        assertContains("<a href=\"A\">Add_Diagnosis_Description</a>", result2.xml);
     }
 
     private Result getResult(String filename) throws Exception {
