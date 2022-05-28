@@ -49,7 +49,7 @@
     <sis.version>0.8</sis.version>
     <parso.version>2.0.11</parso.version>
     <!-- used by POI, PDFBox and Jackcess ...try to sync -->
-    <bouncycastle.version>1.62</bouncycastle.version>
+    <bouncycastle.version>1.69</bouncycastle.version>
     <commonsexec.version>1.3</commonsexec.version>
     <httpcomponents.version>4.5.9</httpcomponents.version>
   </properties>
@@ -962,7 +962,7 @@
                     </goals>
                   </pluginExecutionFilter>
                   <action>
-                    <execute />
+                    <execute/>
                   </action>
                 </pluginExecution>
                 <pluginExecution>
@@ -975,7 +975,7 @@
                     </goals>
                   </pluginExecutionFilter>
                   <action>
-                    <ignore />
+                    <ignore/>
                   </action>
                 </pluginExecution>
                 <pluginExecution>
@@ -988,7 +988,7 @@
                 		</goals>
                 	</pluginExecutionFilter>
                 	<action>
-                		<ignore></ignore>
+                		<ignore/>
                 	</action>
                 </pluginExecution>
               </pluginExecutions>
