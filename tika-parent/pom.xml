@@ -26,7 +26,7 @@
     <groupId>org.apache</groupId>
     <artifactId>apache</artifactId>
     <version>17</version>
-    <relativePath />
+    <relativePath/>
   </parent>
 
   <groupId>org.apache.tika</groupId>
@@ -136,7 +136,7 @@
       <organization>NASA Jet Propulsion Laboratory</organization>
       <organizationUrl>http://www.jpl.nasa.gov</organizationUrl>
       <timezone>-8</timezone>
-      <properties />
+      <properties/>
       <roles>
         <role>committer</role>
       </roles>
@@ -146,7 +146,7 @@
       <id>mikemccand</id>
       <email>mikemccand@apache.org</email>
       <organization>IBM</organization>
-      <properties />
+      <properties/>
       <roles>
         <role>committer</role>
       </roles>
@@ -345,7 +345,7 @@
     <cxf.version>3.3.2</cxf.version>
     <slf4j.version>1.7.26</slf4j.version>
     <jackson.version>2.9.9</jackson.version>
-    <jackson.databind.version>2.9.9.2</jackson.databind.version>
+    <jackson.databind.version>2.12.7.1</jackson.databind.version>
     <!-- when this is next upgraded, see if we can get rid of
          javax.activation dependency in tika-server -->
     <jaxb.version>2.3.2</jaxb.version>
