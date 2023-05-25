@@ -397,7 +397,7 @@
     <dependency>
       <groupId>org.xerial</groupId>
       <artifactId>sqlite-jdbc</artifactId>
-      <version>3.28.0</version>
+      <version>3.41.2.2</version>
       <scope>provided</scope>
     </dependency>
 
@@ -962,7 +962,7 @@
                     </goals>
                   </pluginExecutionFilter>
                   <action>
-                    <execute />
+                    <execute/>
                   </action>
                 </pluginExecution>
                 <pluginExecution>
@@ -975,7 +975,7 @@
                     </goals>
                   </pluginExecutionFilter>
                   <action>
-                    <ignore />
+                    <ignore/>
                   </action>
                 </pluginExecution>
                 <pluginExecution>
@@ -988,7 +988,7 @@
                 		</goals>
                 	</pluginExecutionFilter>
                 	<action>
-                		<ignore></ignore>
+                		<ignore/>
                 	</action>
                 </pluginExecution>
               </pluginExecutions>
