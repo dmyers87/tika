@@ -13,7 +13,7 @@
 #  specific language governing permissions and limitations
 #  under the License.
 
-FROM ubuntu:xenial
+FROM ubuntu:xenial-20210416
 MAINTAINER Apache Tika Team
 
 RUN	apt-get update \
